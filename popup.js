@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Load saved settings
     chrome.storage.sync.get(
-      ['enabled', 'blockedKeywords', 'blockedChannels', 'minViewCount'],
+      ['enabled', 'hideFiltered', 'blockedKeywords', 'blockedChannels', 'minViewCount'],
       function(settings) {
         // Set enabled state
         document.getElementById('enabled').checked = settings.enabled !== false;
+        document.getElementById('hide-filtered').checked = settings.hideFiltered === true;
         
         // Set minimum view count
         const minViewsInput = document.getElementById('min-views');
@@ -15,14 +16,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // Render keyword tags
         if (Array.isArray(settings.blockedKeywords)) {
           settings.blockedKeywords.forEach(keyword => {
-            addTag('keyword', keyword);
+            if (keyword.trim()) {
+              addTag('keyword', keyword);
+            }
           });
         }
         
         // Render channel tags
         if (Array.isArray(settings.blockedChannels)) {
           settings.blockedChannels.forEach(channel => {
-            addTag('channel', channel);
+            if (channel.trim()) {
+              addTag('channel', channel);
+            }
           });
         }
       }
@@ -38,6 +43,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     viewSlider.addEventListener('input', function() {
       minViewsInput.value = this.value;
+    });
+    
+    // Handle view preset clicks
+    document.querySelectorAll('.view-preset').forEach(preset => {
+      preset.addEventListener('click', function() {
+        const value = this.dataset.value;
+        minViewsInput.value = value;
+        viewSlider.value = value;
+      });
     });
     
     // Add keyword
@@ -78,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Save settings
     document.getElementById('save-settings').addEventListener('click', function() {
       const enabled = document.getElementById('enabled').checked;
+      const hideFiltered = document.getElementById('hide-filtered').checked;
       const minViewCount = parseInt(document.getElementById('min-views').value) || 0;
       
       // Get all keywords
@@ -91,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Save to storage
       chrome.storage.sync.set({
         enabled,
+        hideFiltered,
         blockedKeywords,
         blockedChannels,
         minViewCount
@@ -109,6 +125,15 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
           saveBtn.textContent = originalText;
         }, 1500);
+      });
+    });
+    
+    // Refresh YouTube page
+    document.getElementById('refresh-page').addEventListener('click', function() {
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs[0].url.includes('youtube.com')) {
+          chrome.tabs.reload(tabs[0].id);
+        }
       });
     });
     

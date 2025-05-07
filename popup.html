@@ -8,14 +8,21 @@
       width: 350px;
       padding: 15px;
       font-family: Arial, sans-serif;
+      color: #333;
     }
     .section {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    .section:last-child {
+      border-bottom: none;
     }
     h2 {
       margin-top: 0;
       margin-bottom: 10px;
       font-size: 16px;
+      color: #cc0000;
     }
     .toggle {
       display: flex;
@@ -57,7 +64,7 @@
       border-radius: 50%;
     }
     input:checked + .slider {
-      background-color: #2196F3;
+      background-color: #cc0000;
     }
     input:checked + .slider:before {
       transform: translateX(20px);
@@ -66,6 +73,7 @@
       width: 100%;
       box-sizing: border-box;
       margin-bottom: 10px;
+      padding: 8px;
     }
     textarea {
       height: 80px;
@@ -76,13 +84,18 @@
       flex-wrap: wrap;
       gap: 5px;
       margin-bottom: 10px;
+      padding: 5px;
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      min-height: 30px;
     }
     .tag {
-      background-color: #e0e0e0;
+      background-color: #efefef;
       padding: 5px 10px;
       border-radius: 15px;
       display: flex;
       align-items: center;
+      border: 1px solid #ddd;
     }
     .tag span {
       margin-right: 5px;
@@ -95,17 +108,25 @@
       width: auto;
       margin: 0;
       font-weight: bold;
+      color: #cc0000;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+    }
+    .button-group button {
+      flex: 1;
     }
     button.add {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
       padding: 8px;
       cursor: pointer;
       border-radius: 4px;
     }
     button.save {
-      background-color: #2196F3;
+      background-color: #cc0000;
       color: white;
       border: none;
       padding: 10px;
@@ -113,15 +134,71 @@
       border-radius: 4px;
       margin-top: 10px;
     }
+    button.cancel {
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
+      padding: 10px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+    .view-presets {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+    }
+    .view-preset {
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 15px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .view-preset:hover {
+      background-color: #e0e0e0;
+    }
+    #min-views {
+      margin-bottom: 5px;
+    }
+    #view-slider {
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      font-size: 12px;
+      color: #666;
+    }
+    .note {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
-  <div class="toggle">
-    <h2>YouTube Feed Filter</h2>
-    <label class="switch">
-      <input type="checkbox" id="enabled">
-      <span class="slider"></span>
-    </label>
+  <div class="section">
+    <div class="toggle">
+      <h2>YouTube Feed Filter</h2>
+      <label class="switch">
+        <input type="checkbox" id="enabled">
+        <span class="slider"></span>
+      </label>
+    </div>
+    
+    <div class="toggle">
+      <span>Hide filtered videos</span>
+      <label class="switch">
+        <input type="checkbox" id="hide-filtered">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="note">If unchecked, filtered videos will be dimmed with an overlay</div>
   </div>
   
   <div class="section">
@@ -131,6 +208,7 @@
       <input type="text" id="keyword-input" placeholder="Enter keyword to block">
       <button class="add" id="add-keyword">Add</button>
     </div>
+    <div class="note">Videos with these keywords in the title will be filtered</div>
   </div>
   
   <div class="section">
@@ -140,21 +218,32 @@
       <input type="text" id="channel-input" placeholder="Enter channel name to block">
       <button class="add" id="add-channel">Add</button>
     </div>
+    <div class="note">Channel names must match exactly (case insensitive)</div>
   </div>
   
   <div class="section">
     <h2>Minimum View Count</h2>
     <input type="number" id="min-views" min="0" placeholder="Enter minimum view count">
-    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+    <div class="slider-labels">
       <span>0</span>
       <span>10K</span>
       <span>100K</span>
       <span>1M</span>
     </div>
     <input type="range" id="view-slider" min="0" max="1000000" step="1000">
+    <div class="view-presets">
+      <span class="view-preset" data-value="0">None</span>
+      <span class="view-preset" data-value="10000">10K</span>
+      <span class="view-preset" data-value="100000">100K</span>
+      <span class="view-preset" data-value="1000000">1M</span>
+    </div>
+    <div class="note">Videos with fewer views will be filtered</div>
   </div>
   
-  <button class="save" id="save-settings">Save Settings</button>
+  <div class="button-group">
+    <button class="save" id="save-settings">Save Settings</button>
+    <button class="cancel" id="refresh-page">Refresh YouTube</button>
+  </div>
   
   <script src="popup.js"></script>
 </body>

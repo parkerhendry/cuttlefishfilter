@@ -1,22 +1,110 @@
+// content.js
+// YouTube video selectors
 const SELECTORS = {
-    HOME_FEED: 'ytd-rich-grid-renderer',
-    SEARCH_RESULTS: 'ytd-search',
-    VIDEO_ITEM: 'ytd-rich-item-renderer, ytd-video-renderer',
-    VIDEO_TITLE: '#video-title',
-    CHANNEL_NAME: '#channel-name a, #text-container .ytd-channel-name',
-    VIEW_COUNT: '#metadata-line span:first-child',
-    SPINNER: 'tp-yt-paper-spinner'
+    // Home feed items
+    HOME_FEED_ITEMS: 'ytd-rich-grid-media, ytd-rich-item-renderer, ytd-grid-video-renderer',
+    // Search results and recommendation items
+    SEARCH_ITEMS: 'ytd-video-renderer',
+    // Watch page recommendations
+    WATCH_ITEMS: 'ytd-compact-video-renderer',
+    // Channel page videos
+    CHANNEL_ITEMS: 'ytd-grid-video-renderer',
+    // Shorts
+    SHORTS_ITEMS: 'ytd-reel-item-renderer',
+    // Common elements within video items
+    VIDEO_TITLE: '#video-title, #title-wrapper',
+    CHANNEL_NAME: '#channel-name, #text-container .ytd-channel-name, .ytd-channel-name a, #byline-container',
+    VIEW_COUNT: '#metadata-line span:first-child, .ytd-video-meta-block span:first-child',
+    // YouTube containers
+    CONTENT_CONTAINER: '#contents, #items'
   };
+  
+  // Global state
+  let filteredCount = 0;
+  let totalVideos = 0;
+  let optionsVisible = false;
+  
+  // Initialize the extension elements
+  function initializeUI() {
+    // Add filter counter
+    const counterElement = document.createElement('div');
+    counterElement.className = 'yt-filter-counter';
+    counterElement.innerHTML = 'Filtered: 0 videos';
+    document.body.appendChild(counterElement);
+    
+    // Add filter button
+    const filterButton = document.createElement('button');
+    filterButton.className = 'yt-filter-btn';
+    filterButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+      </svg>
+      Filter Options
+    `;
+    filterButton.addEventListener('click', toggleOptionsPanel);
+    document.body.appendChild(filterButton);
+    
+    // Add options panel
+    const optionsPanel = document.createElement('div');
+    optionsPanel.className = 'yt-filter-options';
+    optionsPanel.style.display = 'none';
+    
+    chrome.storage.sync.get(['enabled', 'hideFiltered'], function(settings) {
+      optionsPanel.innerHTML = `
+        <div class="yt-filter-toggle">
+          <span>Enable Filtering</span>
+          <label class="yt-filter-switch">
+            <input type="checkbox" id="yt-filter-enabled" ${settings.enabled ? 'checked' : ''}>
+            <span class="yt-filter-slider"></span>
+          </label>
+        </div>
+        <div class="yt-filter-toggle">
+          <span>Hide Filtered Videos</span>
+          <label class="yt-filter-switch">
+            <input type="checkbox" id="yt-filter-hide" ${settings.hideFiltered ? 'checked' : ''}>
+            <span class="yt-filter-slider"></span>
+          </label>
+        </div>
+        <button id="yt-filter-settings" class="yt-filter-restore">Open Full Settings</button>
+      `;
+      document.body.appendChild(optionsPanel);
+      
+      // Set up event listeners for the toggles
+      document.getElementById('yt-filter-enabled').addEventListener('change', function(e) {
+        chrome.storage.sync.set({ enabled: e.target.checked }, function() {
+          applyFilters();
+        });
+      });
+      
+      document.getElementById('yt-filter-hide').addEventListener('change', function(e) {
+        chrome.storage.sync.set({ hideFiltered: e.target.checked }, function() {
+          applyFilters();
+        });
+      });
+      
+      document.getElementById('yt-filter-settings').addEventListener('click', function() {
+        chrome.runtime.sendMessage({ action: 'openPopup' });
+      });
+    });
+  }
+  
+  // Toggle the options panel visibility
+  function toggleOptionsPanel() {
+    const optionsPanel = document.querySelector('.yt-filter-options');
+    optionsVisible = !optionsVisible;
+    optionsPanel.style.display = optionsVisible ? 'flex' : 'none';
+  }
   
   // Parse view count from strings like "1.2M views" to a number
   function parseViewCount(viewText) {
     if (!viewText) return 0;
     
     // Match numbers with abbreviations like K, M, B
-    const match = viewText.match(/([0-9.]+)([KMB])?\s*views?/i);
+    // Support different formats like "1.2M views", "1,200 views", "1.2M", etc.
+    const match = viewText.match(/([0-9.,]+)([KMB])?\s*views?/i);
     if (!match) return 0;
     
-    let count = parseFloat(match[1]);
+    let count = parseFloat(match[1].replace(/,/g, ''));
     const multiplier = match[2] ? match[2].toUpperCase() : '';
     
     // Convert to actual number
@@ -31,42 +119,48 @@ const SELECTORS = {
   function isKeywordBlocked(title, blockedKeywords) {
     if (!title || !blockedKeywords || blockedKeywords.length === 0) return false;
     
-    return blockedKeywords.some(keyword => 
-      title.toLowerCase().includes(keyword.toLowerCase())
-    );
+    return blockedKeywords.some(keyword => {
+      // Handle empty keywords
+      if (!keyword.trim()) return false;
+      // Case-insensitive match
+      return title.toLowerCase().includes(keyword.toLowerCase());
+    });
   }
   
   // Check if channel is blocked
   function isChannelBlocked(channelName, blockedChannels) {
     if (!channelName || !blockedChannels || blockedChannels.length === 0) return false;
     
-    return blockedChannels.some(channel => 
-      channelName.toLowerCase().trim() === channel.toLowerCase().trim()
-    );
+    return blockedChannels.some(channel => {
+      // Handle empty channel names
+      if (!channel.trim()) return false;
+      // Case-insensitive match
+      return channelName.toLowerCase().trim() === channel.toLowerCase().trim();
+    });
   }
   
-  // Trigger YouTube to load more content
-  function triggerMoreContentLoad() {
-    // Scroll to the bottom of the page
-    window.scrollTo(0, document.body.scrollHeight);
+  // Get all video elements on the page
+  function getAllVideoElements() {
+    const selectors = [
+      SELECTORS.HOME_FEED_ITEMS,
+      SELECTORS.SEARCH_ITEMS,
+      SELECTORS.WATCH_ITEMS,
+      SELECTORS.CHANNEL_ITEMS,
+      SELECTORS.SHORTS_ITEMS
+    ];
     
-    // Wait for the spinner to appear and disappear
-    const checkSpinner = setInterval(() => {
-      const spinner = document.querySelector(SELECTORS.SPINNER);
-      if (!spinner || spinner.style.display === 'none') {
-        clearInterval(checkSpinner);
-        // Re-run filter after new content is loaded
-        setTimeout(filterYouTubeFeed, 1000);
-      }
-    }, 250);
+    return document.querySelectorAll(selectors.join(', '));
   }
   
-  // Main filter function
-  function filterYouTubeFeed() {
+  // Apply filters to all videos on the page
+  function applyFilters() {
     chrome.storage.sync.get(
-      ['enabled', 'blockedKeywords', 'blockedChannels', 'minViewCount'], 
+      ['enabled', 'hideFiltered', 'blockedKeywords', 'blockedChannels', 'minViewCount'],
       function(settings) {
-        if (!settings.enabled) return;
+        if (!settings.enabled) {
+          resetFilters();
+          return;
+        }
         
         // Convert string arrays to actual arrays if needed
         const blockedKeywords = Array.isArray(settings.blockedKeywords) 
@@ -74,103 +168,210 @@ const SELECTORS = {
         const blockedChannels = Array.isArray(settings.blockedChannels) 
           ? settings.blockedChannels : [];
         const minViewCount = settings.minViewCount || 0;
+        const hideFiltered = settings.hideFiltered || false;
         
-        // Select all video items on the page
-        const videoItems = document.querySelectorAll(SELECTORS.VIDEO_ITEM);
+        // Get all video elements
+        const videoElements = getAllVideoElements();
         
-        let filteredCount = 0;
-        let totalItems = videoItems.length;
+        filteredCount = 0;
+        totalVideos = videoElements.length;
         
-        videoItems.forEach((item) => {
-          // Skip if already processed
-          if (item.dataset.filtered) return;
+        // Process each video element
+        videoElements.forEach(videoElement => {
+          // Check if this video container has already been processed
+          if (videoElement.getAttribute('data-yt-filter-processed') === 'true') {
+            // Update existing element if filter status changed
+            const wasFiltered = videoElement.getAttribute('data-yt-filter-status') === 'filtered';
+            const overlay = videoElement.querySelector('.yt-filter-overlay');
+            
+            if (wasFiltered) {
+              filteredCount++;
+              if (hideFiltered) {
+                videoElement.classList.add('hidden-filter');
+                if (overlay) overlay.style.display = 'none';
+              } else {
+                videoElement.classList.remove('hidden-filter');
+                videoElement.classList.add('dimmed-filter');
+                if (overlay) overlay.style.display = 'flex';
+              }
+            }
+            return;
+          }
           
-          // Extract video information
-          const title = item.querySelector(SELECTORS.VIDEO_TITLE)?.textContent || '';
-          const channelName = item.querySelector(SELECTORS.CHANNEL_NAME)?.textContent || '';
-          const viewCountText = item.querySelector(SELECTORS.VIEW_COUNT)?.textContent || '';
+          // Mark as processed
+          videoElement.setAttribute('data-yt-filter-processed', 'true');
           
-          // Convert view count text to number
+          // Extract video data
+          const titleElement = videoElement.querySelector(SELECTORS.VIDEO_TITLE);
+          const channelElement = videoElement.querySelector(SELECTORS.CHANNEL_NAME);
+          const viewCountElement = videoElement.querySelector(SELECTORS.VIEW_COUNT);
+          
+          const title = titleElement ? titleElement.textContent.trim() : '';
+          const channelName = channelElement ? channelElement.textContent.trim() : '';
+          const viewCountText = viewCountElement ? viewCountElement.textContent.trim() : '';
           const viewCount = parseViewCount(viewCountText);
           
           // Apply filters
-          const shouldFilter = 
-            isKeywordBlocked(title, blockedKeywords) || 
-            isChannelBlocked(channelName, blockedChannels) ||
-            (viewCount < minViewCount);
+          let filterReason = '';
+          if (isKeywordBlocked(title, blockedKeywords)) {
+            filterReason = 'Blocked keyword';
+          } else if (isChannelBlocked(channelName, blockedChannels)) {
+            filterReason = 'Blocked channel';
+          } else if (viewCount > 0 && viewCount < minViewCount) {
+            filterReason = `Low views (${viewCountText})`;
+          }
           
-          if (shouldFilter) {
-            // Hide the video item
-            item.style.display = 'none';
-            item.dataset.filtered = 'true';
+          const isFiltered = !!filterReason;
+          
+          // Mark filter status
+          videoElement.setAttribute('data-yt-filter-status', isFiltered ? 'filtered' : 'normal');
+          
+          // Apply visual effects
+          if (isFiltered) {
             filteredCount++;
-          } else {
-            // Make sure visible items are displayed properly
-            item.style.display = '';
-            item.dataset.filtered = 'false';
+            
+            // Position relative for overlay
+            if (window.getComputedStyle(videoElement).position === 'static') {
+              videoElement.style.position = 'relative';
+            }
+            
+            // Add filter overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'yt-filter-overlay';
+            overlay.innerHTML = `
+              <div class="yt-filter-reason">${filterReason}</div>
+              <button class="yt-filter-restore">Show Anyway</button>
+            `;
+            videoElement.appendChild(overlay);
+            
+            // Add event listener to restore button
+            const restoreButton = overlay.querySelector('.yt-filter-restore');
+            restoreButton.addEventListener('click', function() {
+              videoElement.setAttribute('data-yt-filter-status', 'normal');
+              videoElement.classList.remove('dimmed-filter', 'hidden-filter');
+              overlay.style.display = 'none';
+              filteredCount--;
+              updateFilterCounter();
+            });
+            
+            if (hideFiltered) {
+              videoElement.classList.add('hidden-filter');
+              overlay.style.display = 'none';
+            } else {
+              videoElement.classList.add('dimmed-filter');
+            }
           }
         });
         
-        // If too many videos filtered, request more content
-        if (filteredCount > 0 && filteredCount >= totalItems / 2) {
-          triggerMoreContentLoad();
-        }
+        // Update counter
+        updateFilterCounter();
       }
     );
   }
   
-  // Initialize and run filter
-  function initFilter() {
-    // Run filter immediately
-    filterYouTubeFeed();
+  // Reset all filters
+  function resetFilters() {
+    const videoElements = getAllVideoElements();
     
-    // Set up mutation observer to detect new videos
-    const observer = new MutationObserver((mutations) => {
-      let shouldFilter = false;
+    videoElements.forEach(videoElement => {
+      videoElement.classList.remove('dimmed-filter', 'hidden-filter');
+      videoElement.removeAttribute('data-yt-filter-status');
       
-      mutations.forEach(mutation => {
-        if (mutation.addedNodes.length > 0) {
-          shouldFilter = true;
-        }
-      });
-      
-      if (shouldFilter) {
-        filterYouTubeFeed();
+      const overlay = videoElement.querySelector('.yt-filter-overlay');
+      if (overlay) {
+        overlay.remove();
       }
     });
     
-    // Observe changes in the feed container
-    const feedContainer = document.querySelector(SELECTORS.HOME_FEED) || 
-                         document.querySelector(SELECTORS.SEARCH_RESULTS);
-    
-    if (feedContainer) {
-      observer.observe(feedContainer, { 
-        childList: true, 
-        subtree: true 
-      });
-    }
-    
-    // Also filter when navigation happens within YouTube
-    let lastUrl = location.href;
-    new MutationObserver(() => {
-      const url = location.href;
-      if (url !== lastUrl) {
-        lastUrl = url;
-        setTimeout(filterYouTubeFeed, 1500); // Wait for content to load
-      }
-    }).observe(document, { subtree: true, childList: true });
+    filteredCount = 0;
+    updateFilterCounter();
   }
   
-  // Run when page loads
+  // Update the filter counter
+  function updateFilterCounter() {
+    const counterElement = document.querySelector('.yt-filter-counter');
+    if (!counterElement) return;
+    
+    if (filteredCount > 0) {
+      counterElement.textContent = `Filtered: ${filteredCount} videos`;
+      counterElement.style.display = 'block';
+    } else {
+      counterElement.style.display = 'none';
+    }
+  }
+  
+  // Set up mutation observer to detect new videos
+  function setupObserver() {
+    const observer = new MutationObserver((mutations) => {
+      let newContent = false;
+      
+      mutations.forEach(mutation => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // Check if it's a video element or contains video elements
+              if (node.matches && 
+                  (node.matches(Object.values(SELECTORS).join(', ')) || 
+                   node.querySelector(Object.values(SELECTORS).join(', ')))) {
+                newContent = true;
+                break;
+              }
+            }
+          }
+        }
+      });
+      
+      if (newContent) {
+        setTimeout(applyFilters, 100); // Short delay to ensure DOM is ready
+      }
+    });
+    
+    // Observe the entire document for now
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    // Also handle URL changes
+    let lastUrl = location.href;
+    
+    const urlObserver = new MutationObserver(() => {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        setTimeout(() => {
+          applyFilters();
+        }, 1000); // Wait for page to load
+      }
+    });
+    
+    urlObserver.observe(document.querySelector('head > title'), {
+      subtree: true,
+      characterData: true
+    });
+  }
+  
+  // Initialize the extension
+  function init() {
+    // Add UI elements
+    initializeUI();
+    
+    // Apply filters
+    applyFilters();
+    
+    // Set up observer
+    setupObserver();
+  }
+  
+  // Run the extension
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initFilter);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    initFilter();
+    init();
   }
   
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'filterUpdated') {
-      filterYouTubeFeed();
+      applyFilters();
     }
   });
