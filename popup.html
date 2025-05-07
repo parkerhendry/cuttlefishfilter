@@ -1,54 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>YouTube Feed Filter</title>
   <style>
     body {
       width: 350px;
-      font-family: Arial, sans-serif;
       padding: 15px;
-    }
-    h1 {
-      font-size: 18px;
-      margin-bottom: 15px;
+      font-family: Arial, sans-serif;
     }
     .section {
       margin-bottom: 15px;
     }
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: bold;
-    }
-    textarea, input {
-      width: 100%;
-      padding: 5px;
+    h2 {
+      margin-top: 0;
       margin-bottom: 10px;
+      font-size: 16px;
     }
-    .small-text {
-      font-size: 12px;
-      color: #666;
-      margin-top: -5px;
-      margin-bottom: 10px;
-    }
-    button {
-      background-color: #4285f4;
-      color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    button:hover {
-      background-color: #3367d6;
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
     }
     .switch {
       position: relative;
       display: inline-block;
-      width: 50px;
-      height: 24px;
-      margin-bottom: 10px;
+      width: 40px;
+      height: 20px;
     }
     .switch input {
       opacity: 0;
@@ -64,67 +43,119 @@
       bottom: 0;
       background-color: #ccc;
       transition: .4s;
-      border-radius: 24px;
+      border-radius: 20px;
     }
     .slider:before {
       position: absolute;
       content: "";
       height: 16px;
       width: 16px;
-      left: 4px;
-      bottom: 4px;
+      left: 2px;
+      bottom: 2px;
       background-color: white;
       transition: .4s;
       border-radius: 50%;
     }
     input:checked + .slider {
-      background-color: #4285f4;
+      background-color: #2196F3;
     }
     input:checked + .slider:before {
-      transform: translateX(26px);
+      transform: translateX(20px);
     }
-    .status {
-      display: flex;
-      align-items: center;
+    input, textarea, button {
+      width: 100%;
+      box-sizing: border-box;
       margin-bottom: 10px;
     }
-    .status-text {
-      margin-left: 10px;
+    textarea {
+      height: 80px;
+      resize: vertical;
+    }
+    .tag-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .tag {
+      background-color: #e0e0e0;
+      padding: 5px 10px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+    }
+    .tag span {
+      margin-right: 5px;
+    }
+    .tag button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: auto;
+      margin: 0;
+      font-weight: bold;
+    }
+    button.add {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button.save {
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>YouTube Feed Filter</h1>
-  
-  <div class="status">
+  <div class="toggle">
+    <h2>YouTube Feed Filter</h2>
     <label class="switch">
       <input type="checkbox" id="enabled">
       <span class="slider"></span>
     </label>
-    <span class="status-text" id="status-text">Filter is disabled</span>
   </div>
-
+  
   <div class="section">
-    <label for="keywords">Block Keywords:</label>
-    <textarea id="keywords" rows="3" placeholder="Enter keywords to block, one per line"></textarea>
-    <div class="small-text">Videos containing these keywords in title will be hidden</div>
+    <h2>Blocked Keywords</h2>
+    <div id="keyword-tags" class="tag-container"></div>
+    <div style="display: flex; gap: 5px;">
+      <input type="text" id="keyword-input" placeholder="Enter keyword to block">
+      <button class="add" id="add-keyword">Add</button>
+    </div>
   </div>
-
+  
   <div class="section">
-    <label for="channels">Block Channels:</label>
-    <textarea id="channels" rows="3" placeholder="Enter channel names to block, one per line"></textarea>
-    <div class="small-text">Videos from these channels will be hidden</div>
+    <h2>Blocked Channels</h2>
+    <div id="channel-tags" class="tag-container"></div>
+    <div style="display: flex; gap: 5px;">
+      <input type="text" id="channel-input" placeholder="Enter channel name to block">
+      <button class="add" id="add-channel">Add</button>
+    </div>
   </div>
-
+  
   <div class="section">
-    <label for="minViews">Minimum View Count:</label>
-    <input type="number" id="minViews" placeholder="Enter minimum view count" min="0">
-    <div class="small-text">Videos with fewer views will be hidden</div>
+    <h2>Minimum View Count</h2>
+    <input type="number" id="min-views" min="0" placeholder="Enter minimum view count">
+    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+      <span>0</span>
+      <span>10K</span>
+      <span>100K</span>
+      <span>1M</span>
+    </div>
+    <input type="range" id="view-slider" min="0" max="1000000" step="1000">
   </div>
-
-  <button id="save">Save Settings</button>
-  <div id="message" style="margin-top: 10px; color: green;"></div>
-
+  
+  <button class="save" id="save-settings">Save Settings</button>
+  
   <script src="popup.js"></script>
 </body>
 </html>

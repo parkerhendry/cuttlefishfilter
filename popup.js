@@ -1,70 +1,144 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Load saved settings when popup opens
-    chrome.storage.sync.get({
-      enabled: true,
-      keywords: '',
-      channels: '',
-      minViews: 0
-    }, function(items) {
-      document.getElementById('enabled').checked = items.enabled;
-      document.getElementById('keywords').value = items.keywords;
-      document.getElementById('channels').value = items.channels;
-      document.getElementById('minViews').value = items.minViews;
-      updateStatusText(items.enabled);
-    });
-  
-    // Toggle enabled/disabled state
-    document.getElementById('enabled').addEventListener('change', function() {
-      const enabled = this.checked;
-      chrome.storage.sync.set({ enabled: enabled });
-      updateStatusText(enabled);
-      
-      // Notify content script about the change
-      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        if (tabs[0] && tabs[0].url.includes('youtube.com')) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "updateFilter", enabled: enabled });
+    // Load saved settings
+    chrome.storage.sync.get(
+      ['enabled', 'blockedKeywords', 'blockedChannels', 'minViewCount'],
+      function(settings) {
+        // Set enabled state
+        document.getElementById('enabled').checked = settings.enabled !== false;
+        
+        // Set minimum view count
+        const minViewsInput = document.getElementById('min-views');
+        const viewSlider = document.getElementById('view-slider');
+        minViewsInput.value = settings.minViewCount || 0;
+        viewSlider.value = settings.minViewCount || 0;
+        
+        // Render keyword tags
+        if (Array.isArray(settings.blockedKeywords)) {
+          settings.blockedKeywords.forEach(keyword => {
+            addTag('keyword', keyword);
+          });
         }
-      });
+        
+        // Render channel tags
+        if (Array.isArray(settings.blockedChannels)) {
+          settings.blockedChannels.forEach(channel => {
+            addTag('channel', channel);
+          });
+        }
+      }
+    );
+    
+    // Sync number input and slider
+    const minViewsInput = document.getElementById('min-views');
+    const viewSlider = document.getElementById('view-slider');
+    
+    minViewsInput.addEventListener('input', function() {
+      viewSlider.value = this.value;
     });
-  
+    
+    viewSlider.addEventListener('input', function() {
+      minViewsInput.value = this.value;
+    });
+    
+    // Add keyword
+    document.getElementById('add-keyword').addEventListener('click', function() {
+      const input = document.getElementById('keyword-input');
+      const keyword = input.value.trim();
+      
+      if (keyword) {
+        addTag('keyword', keyword);
+        input.value = '';
+      }
+    });
+    
+    // Add channel
+    document.getElementById('add-channel').addEventListener('click', function() {
+      const input = document.getElementById('channel-input');
+      const channel = input.value.trim();
+      
+      if (channel) {
+        addTag('channel', channel);
+        input.value = '';
+      }
+    });
+    
+    // Handle enter key
+    document.getElementById('keyword-input').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        document.getElementById('add-keyword').click();
+      }
+    });
+    
+    document.getElementById('channel-input').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        document.getElementById('add-channel').click();
+      }
+    });
+    
     // Save settings
-    document.getElementById('save').addEventListener('click', function() {
-      const keywords = document.getElementById('keywords').value;
-      const channels = document.getElementById('channels').value;
-      const minViews = parseInt(document.getElementById('minViews').value) || 0;
+    document.getElementById('save-settings').addEventListener('click', function() {
       const enabled = document.getElementById('enabled').checked;
-  
+      const minViewCount = parseInt(document.getElementById('min-views').value) || 0;
+      
+      // Get all keywords
+      const keywordTags = document.querySelectorAll('#keyword-tags .tag span');
+      const blockedKeywords = Array.from(keywordTags).map(tag => tag.textContent);
+      
+      // Get all channels
+      const channelTags = document.querySelectorAll('#channel-tags .tag span');
+      const blockedChannels = Array.from(channelTags).map(tag => tag.textContent);
+      
+      // Save to storage
       chrome.storage.sync.set({
-        enabled: enabled,
-        keywords: keywords,
-        channels: channels,
-        minViews: minViews
+        enabled,
+        blockedKeywords,
+        blockedChannels,
+        minViewCount
       }, function() {
-        // Display save confirmation
-        const message = document.getElementById('message');
-        message.textContent = 'Settings saved!';
-        setTimeout(function() {
-          message.textContent = '';
-        }, 2000);
-  
-        // Notify content script about the changes
+        // Notify content script of update
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-          if (tabs[0] && tabs[0].url.includes('youtube.com')) {
-            chrome.tabs.sendMessage(tabs[0].id, { 
-              action: "updateFilter", 
-              settings: {
-                enabled: enabled,
-                keywords: keywords,
-                channels: channels,
-                minViews: minViews
-              }
-            });
+          if (tabs[0].url.includes('youtube.com')) {
+            chrome.tabs.sendMessage(tabs[0].id, {action: 'filterUpdated'});
           }
         });
+        
+        // Show saved message
+        const saveBtn = document.getElementById('save-settings');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = 'Saved!';
+        setTimeout(() => {
+          saveBtn.textContent = originalText;
+        }, 1500);
       });
     });
-  
-    function updateStatusText(enabled) {
-      document.getElementById('status-text').textContent = enabled ? 'Filter is enabled' : 'Filter is disabled';
+    
+    // Add tag to the UI
+    function addTag(type, value) {
+      const container = document.getElementById(`${type}-tags`);
+      
+      // Check if tag already exists
+      const existingTags = container.querySelectorAll('.tag span');
+      for (const tag of existingTags) {
+        if (tag.textContent.toLowerCase() === value.toLowerCase()) {
+          return; // Tag already exists
+        }
+      }
+      
+      // Create new tag
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      
+      const span = document.createElement('span');
+      span.textContent = value;
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', function() {
+        container.removeChild(tag);
+      });
+      
+      tag.appendChild(span);
+      tag.appendChild(removeBtn);
+      container.appendChild(tag);
     }
   });

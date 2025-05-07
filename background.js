@@ -1,9 +1,9 @@
 chrome.runtime.onInstalled.addListener(() => {
-    // Set default settings when extension is installed
+    // Set default settings
     chrome.storage.sync.set({
       enabled: true,
-      keywords: '',
-      channels: '',
-      minViews: 0
+      blockedKeywords: [],
+      blockedChannels: [],
+      minViewCount: 0
     });
   });
