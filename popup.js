@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', function() {
         minViewsInput.value = settings.minViewCount || 0;
         viewSlider.value = settings.minViewCount || 0;
         
+        // Update view count display
+        updateViewCountDisplay();
+        
         // Render keyword tags
         if (Array.isArray(settings.blockedKeywords)) {
           settings.blockedKeywords.forEach(keyword => {
@@ -33,16 +36,35 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     );
     
+    // Function to format view count for display
+    function formatViewCount(count) {
+      if (count >= 1000000) {
+        return (count / 1000000).toFixed(1) + 'M';
+      } else if (count >= 1000) {
+        return (count / 1000).toFixed(1) + 'K';
+      } else {
+        return count;
+      }
+    }
+    
+    // Update view count display
+    function updateViewCountDisplay() {
+      const value = document.getElementById('view-slider').value;
+      document.getElementById('view-count-display').textContent = formatViewCount(parseInt(value));
+    }
+    
     // Sync number input and slider
     const minViewsInput = document.getElementById('min-views');
     const viewSlider = document.getElementById('view-slider');
     
     minViewsInput.addEventListener('input', function() {
       viewSlider.value = this.value;
+      updateViewCountDisplay();
     });
     
     viewSlider.addEventListener('input', function() {
       minViewsInput.value = this.value;
+      updateViewCountDisplay();
     });
     
     // Handle view preset clicks
@@ -51,6 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const value = this.dataset.value;
         minViewsInput.value = value;
         viewSlider.value = value;
+        updateViewCountDisplay();
       });
     });
     
@@ -62,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (keyword) {
         addTag('keyword', keyword);
         input.value = '';
+        input.focus();
       }
     });
     
@@ -73,6 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (channel) {
         addTag('channel', channel);
         input.value = '';
+        input.focus();
       }
     });
     
@@ -91,6 +116,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Save settings
     document.getElementById('save-settings').addEventListener('click', function() {
+      saveSettings();
+    });
+    
+    // Function to save settings
+    function saveSettings() {
       const enabled = document.getElementById('enabled').checked;
       const hideFiltered = document.getElementById('hide-filtered').checked;
       const minViewCount = parseInt(document.getElementById('min-views').value) || 0;
@@ -126,15 +156,20 @@ document.addEventListener('DOMContentLoaded', function() {
           saveBtn.textContent = originalText;
         }, 1500);
       });
-    });
+    }
     
-    // Refresh YouTube page
-    document.getElementById('refresh-page').addEventListener('click', function() {
+    // Toggle option to hide or dim filtered videos
+    document.getElementById('hide-filtered').addEventListener('change', function() {
       chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         if (tabs[0].url.includes('youtube.com')) {
-          chrome.tabs.reload(tabs[0].id);
+          chrome.tabs.sendMessage(tabs[0].id, {action: 'toggleVisibility'});
         }
       });
+    });
+    
+    // Toggle enabled state
+    document.getElementById('enabled').addEventListener('change', function() {
+      saveSettings();
     });
     
     // Add tag to the UI
@@ -160,10 +195,21 @@ document.addEventListener('DOMContentLoaded', function() {
       removeBtn.textContent = '×';
       removeBtn.addEventListener('click', function() {
         container.removeChild(tag);
+        saveSettings(); // Auto-save when removing tags
       });
       
       tag.appendChild(span);
       tag.appendChild(removeBtn);
       container.appendChild(tag);
     }
+    
+    // Apply filters button - immediately refresh and apply
+    document.getElementById('refresh-page').addEventListener('click', function() {
+      saveSettings();
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs[0].url.includes('youtube.com')) {
+          chrome.tabs.reload(tabs[0].id);
+        }
+      });
+    });
   });

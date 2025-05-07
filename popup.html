@@ -88,6 +88,8 @@
       background-color: #f9f9f9;
       border-radius: 4px;
       min-height: 30px;
+      max-height: 120px;
+      overflow-y: auto;
     }
     .tag {
       background-color: #efefef;
@@ -96,6 +98,7 @@
       display: flex;
       align-items: center;
       border: 1px solid #ddd;
+      margin-bottom: 5px;
     }
     .tag span {
       margin-right: 5px;
@@ -179,6 +182,22 @@
       margin-top: 5px;
       font-style: italic;
     }
+    .view-count-display {
+      text-align: center;
+      font-weight: bold;
+      color: #cc0000;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    .status-badge {
+      display: inline-block;
+      background-color: #cc0000;
+      color: white;
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
   </style>
 </head>
 <body>
@@ -218,31 +237,33 @@
       <input type="text" id="channel-input" placeholder="Enter channel name to block">
       <button class="add" id="add-channel">Add</button>
     </div>
-    <div class="note">Channel names must match exactly (case insensitive)</div>
+    <div class="note">All videos from these channels will be filtered</div>
   </div>
   
   <div class="section">
     <h2>Minimum View Count</h2>
-    <input type="number" id="min-views" min="0" placeholder="Enter minimum view count">
+    <div class="view-count-display" id="view-count-display">0</div>
+    <input type="number" id="min-views" placeholder="Minimum view count" min="0">
+    <input type="range" id="view-slider" min="0" max="10000000" step="1000">
     <div class="slider-labels">
       <span>0</span>
-      <span>10K</span>
-      <span>100K</span>
-      <span>1M</span>
+      <span>10M</span>
     </div>
-    <input type="range" id="view-slider" min="0" max="1000000" step="1000">
     <div class="view-presets">
-      <span class="view-preset" data-value="0">None</span>
-      <span class="view-preset" data-value="10000">10K</span>
-      <span class="view-preset" data-value="100000">100K</span>
-      <span class="view-preset" data-value="1000000">1M</span>
+      <div class="view-preset" data-value="10000">10K</div>
+      <div class="view-preset" data-value="100000">100K</div>
+      <div class="view-preset" data-value="1000000">1M</div>
+      <div class="view-preset" data-value="5000000">5M</div>
     </div>
-    <div class="note">Videos with fewer views will be filtered</div>
+    <div class="note">Videos with fewer views than this will be filtered</div>
   </div>
   
-  <div class="button-group">
-    <button class="save" id="save-settings">Save Settings</button>
-    <button class="cancel" id="refresh-page">Refresh YouTube</button>
+  <div class="section">
+    <div class="button-group">
+      <button class="save" id="save-settings">Save Settings</button>
+      <button class="cancel" id="refresh-page">Apply & Refresh</button>
+    </div>
+    <div class="note">Changes are saved automatically when toggling switches</div>
   </div>
   
   <script src="popup.js"></script>

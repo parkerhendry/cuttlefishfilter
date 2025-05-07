@@ -1,14 +1,12 @@
 // content.js
-// YouTube video selectors
+// YouTube video selectors - Updated for current YouTube DOM
 const SELECTORS = {
     // Home feed items
-    HOME_FEED_ITEMS: 'ytd-rich-grid-media, ytd-rich-item-renderer, ytd-grid-video-renderer',
-    // Search results and recommendation items
+    HOME_FEED_ITEMS: 'ytd-rich-item-renderer, ytd-grid-video-renderer',
+    // Search results
     SEARCH_ITEMS: 'ytd-video-renderer',
     // Watch page recommendations
     WATCH_ITEMS: 'ytd-compact-video-renderer',
-    // Channel page videos
-    CHANNEL_ITEMS: 'ytd-grid-video-renderer',
     // Shorts
     SHORTS_ITEMS: 'ytd-reel-item-renderer',
     // Common elements within video items
@@ -22,86 +20,36 @@ const SELECTORS = {
   // Global state
   let filteredCount = 0;
   let totalVideos = 0;
-  let optionsVisible = false;
   
-  // Initialize the extension elements
-  function initializeUI() {
-    // Add filter counter
+  // Add filter counter element
+  function addFilterCounter() {
     const counterElement = document.createElement('div');
     counterElement.className = 'yt-filter-counter';
     counterElement.innerHTML = 'Filtered: 0 videos';
+    counterElement.style.position = 'fixed';
+    counterElement.style.bottom = '20px';
+    counterElement.style.right = '20px';
+    counterElement.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    counterElement.style.color = 'white';
+    counterElement.style.padding = '8px 12px';
+    counterElement.style.borderRadius = '4px';
+    counterElement.style.fontFamily = 'Roboto, Arial, sans-serif';
+    counterElement.style.fontSize = '14px';
+    counterElement.style.zIndex = '9999';
+    counterElement.style.display = 'none';
     document.body.appendChild(counterElement);
-    
-    // Add filter button
-    const filterButton = document.createElement('button');
-    filterButton.className = 'yt-filter-btn';
-    filterButton.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-      </svg>
-      Filter Options
-    `;
-    filterButton.addEventListener('click', toggleOptionsPanel);
-    document.body.appendChild(filterButton);
-    
-    // Add options panel
-    const optionsPanel = document.createElement('div');
-    optionsPanel.className = 'yt-filter-options';
-    optionsPanel.style.display = 'none';
-    
-    chrome.storage.sync.get(['enabled', 'hideFiltered'], function(settings) {
-      optionsPanel.innerHTML = `
-        <div class="yt-filter-toggle">
-          <span>Enable Filtering</span>
-          <label class="yt-filter-switch">
-            <input type="checkbox" id="yt-filter-enabled" ${settings.enabled ? 'checked' : ''}>
-            <span class="yt-filter-slider"></span>
-          </label>
-        </div>
-        <div class="yt-filter-toggle">
-          <span>Hide Filtered Videos</span>
-          <label class="yt-filter-switch">
-            <input type="checkbox" id="yt-filter-hide" ${settings.hideFiltered ? 'checked' : ''}>
-            <span class="yt-filter-slider"></span>
-          </label>
-        </div>
-        <button id="yt-filter-settings" class="yt-filter-restore">Open Full Settings</button>
-      `;
-      document.body.appendChild(optionsPanel);
-      
-      // Set up event listeners for the toggles
-      document.getElementById('yt-filter-enabled').addEventListener('change', function(e) {
-        chrome.storage.sync.set({ enabled: e.target.checked }, function() {
-          applyFilters();
-        });
-      });
-      
-      document.getElementById('yt-filter-hide').addEventListener('change', function(e) {
-        chrome.storage.sync.set({ hideFiltered: e.target.checked }, function() {
-          applyFilters();
-        });
-      });
-      
-      document.getElementById('yt-filter-settings').addEventListener('click', function() {
-        chrome.runtime.sendMessage({ action: 'openPopup' });
-      });
-    });
-  }
-  
-  // Toggle the options panel visibility
-  function toggleOptionsPanel() {
-    const optionsPanel = document.querySelector('.yt-filter-options');
-    optionsVisible = !optionsVisible;
-    optionsPanel.style.display = optionsVisible ? 'flex' : 'none';
   }
   
   // Parse view count from strings like "1.2M views" to a number
   function parseViewCount(viewText) {
     if (!viewText) return 0;
     
+    // Clean the text first (sometimes it contains non-breaking spaces or other characters)
+    const cleanText = viewText.replace(/\s+/g, ' ').trim();
+    
     // Match numbers with abbreviations like K, M, B
     // Support different formats like "1.2M views", "1,200 views", "1.2M", etc.
-    const match = viewText.match(/([0-9.,]+)([KMB])?\s*views?/i);
+    const match = cleanText.match(/([0-9.,]+)([KMB])?\s*views?/i);
     if (!match) return 0;
     
     let count = parseFloat(match[1].replace(/,/g, ''));
@@ -119,11 +67,12 @@ const SELECTORS = {
   function isKeywordBlocked(title, blockedKeywords) {
     if (!title || !blockedKeywords || blockedKeywords.length === 0) return false;
     
+    const titleLower = title.toLowerCase();
     return blockedKeywords.some(keyword => {
       // Handle empty keywords
       if (!keyword.trim()) return false;
       // Case-insensitive match
-      return title.toLowerCase().includes(keyword.toLowerCase());
+      return titleLower.includes(keyword.toLowerCase());
     });
   }
   
@@ -131,11 +80,12 @@ const SELECTORS = {
   function isChannelBlocked(channelName, blockedChannels) {
     if (!channelName || !blockedChannels || blockedChannels.length === 0) return false;
     
+    const channelLower = channelName.toLowerCase().trim();
     return blockedChannels.some(channel => {
       // Handle empty channel names
       if (!channel.trim()) return false;
       // Case-insensitive match
-      return channelName.toLowerCase().trim() === channel.toLowerCase().trim();
+      return channelLower === channel.toLowerCase().trim();
     });
   }
   
@@ -145,7 +95,6 @@ const SELECTORS = {
       SELECTORS.HOME_FEED_ITEMS,
       SELECTORS.SEARCH_ITEMS,
       SELECTORS.WATCH_ITEMS,
-      SELECTORS.CHANNEL_ITEMS,
       SELECTORS.SHORTS_ITEMS
     ];
     
@@ -154,9 +103,13 @@ const SELECTORS = {
   
   // Apply filters to all videos on the page
   function applyFilters() {
+    console.log("YouTube Filter: Applying filters...");
+    
     chrome.storage.sync.get(
       ['enabled', 'hideFiltered', 'blockedKeywords', 'blockedChannels', 'minViewCount'],
       function(settings) {
+        console.log("YouTube Filter: Got settings", settings);
+        
         if (!settings.enabled) {
           resetFilters();
           return;
@@ -167,39 +120,30 @@ const SELECTORS = {
           ? settings.blockedKeywords : [];
         const blockedChannels = Array.isArray(settings.blockedChannels) 
           ? settings.blockedChannels : [];
-        const minViewCount = settings.minViewCount || 0;
+        const minViewCount = Number(settings.minViewCount) || 0;
         const hideFiltered = settings.hideFiltered || false;
+        
+        console.log("YouTube Filter: Using keywords:", blockedKeywords);
+        console.log("YouTube Filter: Using channels:", blockedChannels);
+        console.log("YouTube Filter: Min views:", minViewCount);
         
         // Get all video elements
         const videoElements = getAllVideoElements();
+        console.log("YouTube Filter: Found", videoElements.length, "video elements");
         
         filteredCount = 0;
         totalVideos = videoElements.length;
         
         // Process each video element
-        videoElements.forEach(videoElement => {
-          // Check if this video container has already been processed
-          if (videoElement.getAttribute('data-yt-filter-processed') === 'true') {
-            // Update existing element if filter status changed
-            const wasFiltered = videoElement.getAttribute('data-yt-filter-status') === 'filtered';
-            const overlay = videoElement.querySelector('.yt-filter-overlay');
-            
-            if (wasFiltered) {
-              filteredCount++;
-              if (hideFiltered) {
-                videoElement.classList.add('hidden-filter');
-                if (overlay) overlay.style.display = 'none';
-              } else {
-                videoElement.classList.remove('hidden-filter');
-                videoElement.classList.add('dimmed-filter');
-                if (overlay) overlay.style.display = 'flex';
-              }
-            }
-            return;
+        videoElements.forEach((videoElement, index) => {
+          // Remove any existing overlays
+          const existingOverlay = videoElement.querySelector('.yt-filter-overlay');
+          if (existingOverlay) {
+            existingOverlay.remove();
           }
           
-          // Mark as processed
-          videoElement.setAttribute('data-yt-filter-processed', 'true');
+          // Reset classes
+          videoElement.classList.remove('dimmed-filter', 'hidden-filter');
           
           // Extract video data
           const titleElement = videoElement.querySelector(SELECTORS.VIDEO_TITLE);
@@ -210,6 +154,16 @@ const SELECTORS = {
           const channelName = channelElement ? channelElement.textContent.trim() : '';
           const viewCountText = viewCountElement ? viewCountElement.textContent.trim() : '';
           const viewCount = parseViewCount(viewCountText);
+          
+          // Debug specific video
+          if (index === 0) {
+            console.log("YouTube Filter: Example video data:", {
+              title,
+              channelName,
+              viewCountText,
+              viewCount
+            });
+          }
           
           // Apply filters
           let filterReason = '';
@@ -223,9 +177,6 @@ const SELECTORS = {
           
           const isFiltered = !!filterReason;
           
-          // Mark filter status
-          videoElement.setAttribute('data-yt-filter-status', isFiltered ? 'filtered' : 'normal');
-          
           // Apply visual effects
           if (isFiltered) {
             filteredCount++;
@@ -238,16 +189,32 @@ const SELECTORS = {
             // Add filter overlay
             const overlay = document.createElement('div');
             overlay.className = 'yt-filter-overlay';
+            overlay.style.position = 'absolute';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.right = '0';
+            overlay.style.bottom = '0';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            overlay.style.zIndex = '5';
+            overlay.style.display = 'flex';
+            overlay.style.flexDirection = 'column';
+            overlay.style.justifyContent = 'center';
+            overlay.style.alignItems = 'center';
+            overlay.style.color = 'white';
+            overlay.style.textAlign = 'center';
+            overlay.style.padding = '10px';
+            overlay.style.fontFamily = 'Roboto, Arial, sans-serif';
+            
             overlay.innerHTML = `
-              <div class="yt-filter-reason">${filterReason}</div>
-              <button class="yt-filter-restore">Show Anyway</button>
+              <div class="yt-filter-reason" style="font-size: 14px; margin-bottom: 5px;">${filterReason}</div>
+              <button class="yt-filter-restore" style="background-color: #3ea6ff; color: black; border: none; border-radius: 2px; padding: 6px 12px; font-size: 14px; cursor: pointer; margin-top: 8px;">Show Anyway</button>
             `;
             videoElement.appendChild(overlay);
             
             // Add event listener to restore button
             const restoreButton = overlay.querySelector('.yt-filter-restore');
-            restoreButton.addEventListener('click', function() {
-              videoElement.setAttribute('data-yt-filter-status', 'normal');
+            restoreButton.addEventListener('click', function(e) {
+              e.stopPropagation(); // Prevent clicking through to the video
               videoElement.classList.remove('dimmed-filter', 'hidden-filter');
               overlay.style.display = 'none';
               filteredCount--;
@@ -256,9 +223,10 @@ const SELECTORS = {
             
             if (hideFiltered) {
               videoElement.classList.add('hidden-filter');
-              overlay.style.display = 'none';
+              videoElement.style.display = 'none';
             } else {
               videoElement.classList.add('dimmed-filter');
+              videoElement.style.opacity = '0.3';
             }
           }
         });
@@ -275,7 +243,8 @@ const SELECTORS = {
     
     videoElements.forEach(videoElement => {
       videoElement.classList.remove('dimmed-filter', 'hidden-filter');
-      videoElement.removeAttribute('data-yt-filter-status');
+      videoElement.style.opacity = '';
+      videoElement.style.display = ''; // Restore original display value
       
       const overlay = videoElement.querySelector('.yt-filter-overlay');
       if (overlay) {
@@ -303,63 +272,112 @@ const SELECTORS = {
   // Set up mutation observer to detect new videos
   function setupObserver() {
     const observer = new MutationObserver((mutations) => {
-      let newContent = false;
+      let shouldFilter = false;
       
       mutations.forEach(mutation => {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           for (const node of mutation.addedNodes) {
             if (node.nodeType === Node.ELEMENT_NODE) {
-              // Check if it's a video element or contains video elements
-              if (node.matches && 
-                  (node.matches(Object.values(SELECTORS).join(', ')) || 
-                   node.querySelector(Object.values(SELECTORS).join(', ')))) {
-                newContent = true;
-                break;
+              // Check if any selectors match this node or its children
+              const selectors = [
+                SELECTORS.HOME_FEED_ITEMS,
+                SELECTORS.SEARCH_ITEMS, 
+                SELECTORS.WATCH_ITEMS,
+                SELECTORS.SHORTS_ITEMS
+              ];
+              
+              for (const selector of selectors) {
+                if ((node.matches && node.matches(selector)) || 
+                    (node.querySelector && node.querySelector(selector))) {
+                  shouldFilter = true;
+                  break;
+                }
               }
+              
+              if (shouldFilter) break;
             }
           }
         }
       });
       
-      if (newContent) {
-        setTimeout(applyFilters, 100); // Short delay to ensure DOM is ready
+      if (shouldFilter) {
+        console.log("YouTube Filter: New content detected, reapplying filters");
+        setTimeout(applyFilters, 200); // Short delay to ensure DOM is ready
       }
     });
     
-    // Observe the entire document for now
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    // Start observing critical YouTube containers
+    const contentContainers = document.querySelectorAll(SELECTORS.CONTENT_CONTAINER);
+    if (contentContainers.length > 0) {
+      console.log("YouTube Filter: Setting up observer on content containers:", contentContainers.length);
+      contentContainers.forEach(container => {
+        observer.observe(container, {
+          childList: true,
+          subtree: true
+        });
+      });
+    } else {
+      // Fallback to observing the body
+      console.log("YouTube Filter: No content containers found, observing body");
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
     
-    // Also handle URL changes
+    // Also handle URL changes (YouTube is a SPA)
     let lastUrl = location.href;
-    
     const urlObserver = new MutationObserver(() => {
       if (location.href !== lastUrl) {
+        console.log("YouTube Filter: URL changed from", lastUrl, "to", location.href);
         lastUrl = location.href;
+        
+        // Wait for the new page to load
         setTimeout(() => {
+          // Re-setup the observer for new content containers
+          const newContainers = document.querySelectorAll(SELECTORS.CONTENT_CONTAINER);
+          if (newContainers.length > 0) {
+            console.log("YouTube Filter: Re-setting up observer on new containers");
+            observer.disconnect();
+            newContainers.forEach(container => {
+              observer.observe(container, {
+                childList: true,
+                subtree: true
+              });
+            });
+          }
+          
+          // Apply filters to the new page
           applyFilters();
-        }, 1000); // Wait for page to load
+        }, 1000);
       }
     });
     
-    urlObserver.observe(document.querySelector('head > title'), {
-      subtree: true,
-      characterData: true
-    });
+    // Observe title changes which may indicate page navigation
+    const titleElement = document.querySelector('head > title');
+    if (titleElement) {
+      urlObserver.observe(titleElement, {
+        subtree: true,
+        characterData: true
+      });
+    }
   }
   
   // Initialize the extension
   function init() {
+    console.log("YouTube Feed Filter: Initializing...");
+    
     // Add UI elements
-    initializeUI();
+    addFilterCounter();
     
     // Apply filters
     applyFilters();
     
     // Set up observer
     setupObserver();
+    
+    // Re-apply filters periodically for safety
+    setInterval(applyFilters, 10000);
   }
   
   // Run the extension
@@ -371,7 +389,16 @@ const SELECTORS = {
   
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message) => {
+    console.log("YouTube Filter: Received message", message);
     if (message.action === 'filterUpdated') {
       applyFilters();
+    } else if (message.action === 'toggleVisibility') {
+      chrome.storage.sync.get(['hideFiltered'], function(settings) {
+        // Toggle the setting
+        const newSetting = !settings.hideFiltered;
+        chrome.storage.sync.set({ hideFiltered: newSetting }, function() {
+          applyFilters();
+        });
+      });
     }
   });
